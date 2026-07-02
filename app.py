@@ -8,6 +8,7 @@ class State(TypedDict):
 
 
 def greet_node(state: State) -> State:
+    """Greets the user with a personalized message."""
     name = state["name"]
     return {"message": f"Hello, {name}! Welcome to LangGraph!"}
 

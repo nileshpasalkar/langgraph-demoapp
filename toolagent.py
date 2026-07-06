@@ -104,5 +104,5 @@ def print_stream(stream):
         else:
             message.pretty_print()
 
-inputs = {"messages": [HumanMessage(content="add 50 to 32 and then multiply the with 2 and what is weather in mumbai city")]}
+inputs = {"messages": [HumanMessage(content="add 2 to 2 and then multiply the with 2 and if result is less than temprature in  pune then put big smilly face else put sad face")]}
 print_stream(app.stream(inputs, stream_mode="values"))

@@ -1,0 +1,112 @@
+rag.py - Code Explanation
+==========================
+
+Overview
+--------
+A command-line Retrieval-Augmented Generation (RAG) pipeline. It loads
+product manuals from the docs/ folder, splits and embeds them into a
+Chroma vector store, then answers a user's question by retrieving
+relevant chunks and passing them to an LLM as context.
+
+Prerequisites
+-------------
+- Python packages: langchain-community, langchain-openai,
+  langchain-text-splitters, langchain-core, langchain-chroma,
+  python-dotenv, docx2txt, sentence-transformers.
+- A .env file in the project root with OPENAI_API_KEY set to a Groq API
+  key (the script calls Groq's OpenAI-compatible endpoint, not OpenAI
+  itself).
+- A docs/ folder containing .pdf and/or .docx files to index.
+
+Line-by-Line / Section Walkthrough
+-----------------------------------
+
+Lines 1-13: Imports
+  Pulls in document loaders (PyPDFLoader, Docx2txtLoader), the Groq-backed
+  ChatOpenAI LLM wrapper, a text splitter, the Chroma vector store,
+  two different embedding classes, prompt/runnable/output-parser
+  utilities from langchain-core, and dotenv for environment variables.
+
+Lines 15-22: Load environment and LLM
+  load_dotenv() reads the .env file so OPENAI_API_KEY is available.
+  ChatOpenAI is configured with model="llama-3.3-70b-versatile" and
+  base_url="https://api.groq.com/openai/v1", so despite the class name
+  it is really calling Groq. temperature=0 makes answers deterministic.
+
+Lines 24-37: load_documents(folder_path)
+  Walks every file in the given folder. .pdf files are loaded with
+  PyPDFLoader, .docx files with Docx2txtLoader; anything else is
+  skipped with a printed warning. Each loader returns a list of
+  LangChain Document objects (roughly one per page), which are
+  accumulated into a single list.
+
+Lines 39-41: Run the loader
+  Calls load_documents("docs") and prints how many documents were
+  loaded in total.
+
+Lines 43-50: Split into chunks
+  RecursiveCharacterTextSplitter breaks each Document into ~1000
+  character chunks with 200 characters of overlap between consecutive
+  chunks. This keeps retrieval focused on small, relevant passages
+  instead of whole pages.
+
+Lines 52-55: Create embeddings
+  HuggingFaceEmbeddings() embeds every chunk's text into vectors
+  (document_embeddings), and a separate SentenceTransformerEmbeddings
+  instance (model "all-MiniLM-L6-v2") is also created.
+  NOTE: document_embeddings is computed but never actually used below -
+  the vector store is built with embedding_function instead. This is
+  redundant work left over from earlier iteration of the script.
+
+Lines 57-64: Build the vector store
+  Chroma.from_documents() embeds the chunks (this time via
+  embedding_function) and persists them to disk under ./chroma_db in a
+  collection named "my_collection". Every run of the script rebuilds
+  this from scratch - there's no check for an existing, up-to-date
+  store.
+
+Lines 66-73: Retriever and prompt template
+  vectorstore.as_retriever(search_kwargs={"k": 2}) wraps the store so it
+  returns the top 2 most similar chunks for a given query. The prompt
+  template instructs the model to answer strictly from the supplied
+  context and question.
+
+Lines 75-76: docs2str(docs)
+  Helper that joins a list of retrieved Document chunks into one string,
+  separated by blank lines, so it can be inserted into the prompt as
+  {context}.
+
+Lines 78-83: rag_chain
+  Composes the pipeline using LangChain's Runnable "|" operator:
+    1. {"context": retriever | docs2str, "question": RunnablePassthrough()}
+       - retrieves chunks for the question and stringifies them as context
+       - passes the original question through unchanged
+    2. | prompt        - fills the template with context and question
+    3. | llm           - sends the filled prompt to the Groq LLM
+    4. | StrOutputParser() - extracts the plain text answer from the
+       LLM's response object
+
+Lines 84-87: Ask a question
+  Prompts the user on the command line, invokes the chain with the
+  question, and prints both the question and the answer.
+
+Usage
+-----
+  python rag.py
+
+You will be prompted:
+  Enter your question: What is the warranty on the UltraBlend Pro Blender?
+
+The script prints the question and the model's answer, grounded in the
+content of the files under docs/.
+
+Known Issues / Notes
+---------------------
+1. Every run reloads, re-splits, and re-embeds all documents in docs/
+   and rebuilds ./chroma_db from scratch - there is no check for an
+   existing, up-to-date vector store, so repeated runs redo the same
+   work unnecessarily.
+2. HuggingFaceEmbeddings is instantiated and used to compute
+   document_embeddings (lines 52-53), but the vector store is actually
+   built with a separate SentenceTransformerEmbeddings instance
+   (line 54) - the first embeddings are wasted computation.

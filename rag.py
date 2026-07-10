@@ -79,6 +79,7 @@ rag_chain = (
     {"context": retriever | docs2str, "question": RunnablePassthrough()}
     | prompt
     | llm
+    | StrOutputParser()
 )
 question = input("Enter your question: ")
 response = rag_chain.invoke(question)

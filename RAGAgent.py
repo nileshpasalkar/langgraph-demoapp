@@ -69,7 +69,7 @@ except Exception as e:
 
 retriever = vector_store.as_retriever(
     search_type="similarity",
-    search_kwargs={"k": 3} # K is the amount of chunks to return
+    search_kwargs={"k": 5} # K is the amount of chunks to return
 )
 
 @tool
